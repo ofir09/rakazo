@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import type { PoolClient } from "pg";
 import { Pool } from "pg";
 import { PrismaClient } from "./generated/prisma/client.js";
+import { installDbContext, withRowLevelSecurity } from "./row-security.js";
 
 export type Db = PrismaClient;
 
@@ -34,6 +35,7 @@ export function createPool(connectionString: string, options: DbClientOptions = 
     client.on("error", () => undefined);
   });
   installConnectRetry(pool);
+  installDbContext(pool);
   return pool;
 }
 
@@ -43,7 +45,7 @@ export function createDb(
 ): { prisma: PrismaClient; pool: Pool } {
   const pool = createPool(connectionString, options);
   const adapter = new PrismaPg(pool);
-  const prisma = new PrismaClient({ adapter });
+  const prisma = withRowLevelSecurity(new PrismaClient({ adapter }));
   return { prisma, pool };
 }
 

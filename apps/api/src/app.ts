@@ -7,6 +7,7 @@ import type {
   ConnectorProvider,
   JobPublisher,
   ManagedConnectorProvider,
+  MessagingInboundEvent,
   MessagingSurface,
   NotificationProvider,
   RealtimeFanout,
@@ -84,12 +85,15 @@ import {
   createPool,
   createSecurityEventPruner,
   createThreadEvents,
+  describeRowSecurity,
   IsolationError,
   installSecurityEventStore,
   parsePositiveInteger,
   provisionMessagingIdentity,
   pushSessionExpiresAt,
   requireMembership,
+  rowSecurityWarning,
+  runAsSystem,
   securityEventRetentionDays,
 } from "@rakazo/db";
 import type { Logger } from "@rakazo/logging";
@@ -172,25 +176,32 @@ export interface AppHandles {
   stop: () => Promise<void>;
 }
 
-export async function createApp(
-  overrides: Partial<AppEnv> & {
-    prisma?: PrismaClient;
-    realtime?: RealtimeFanout;
-    sandbox?: SandboxProvider;
-    composio?: ComposioProvider;
-    /** Test-only connector providers registered beside the configured ones. */
-    connectors?: ConnectorProvider[];
-    pipedream?: ManagedConnectorProvider;
-    messaging?: MessagingSurface;
-    email?: TransactionalEmailProvider;
-    notifications?: NotificationProvider;
-    billing?: BillingProvider;
-    remoteConnectors?: RemoteConnectorDependencies;
-    logger?: Logger;
-    runtime?: AgentRuntime;
-    contextStrategy?: AgentContextStrategy;
-  } = {},
-): Promise<AppHandles> {
+// Startup and everything it schedules (pollers, team chat, the in-memory job
+// queue, retries) runs across tenants. Requests start without a context and get
+// one per route: tenant for signed-in procedures, system for auth and webhooks.
+export function createApp(overrides: CreateAppOverrides = {}): Promise<AppHandles> {
+  return runAsSystem("api startup and background work", () => buildApp(overrides));
+}
+
+type CreateAppOverrides = Partial<AppEnv> & {
+  prisma?: PrismaClient;
+  realtime?: RealtimeFanout;
+  sandbox?: SandboxProvider;
+  composio?: ComposioProvider;
+  /** Test-only connector providers registered beside the configured ones. */
+  connectors?: ConnectorProvider[];
+  pipedream?: ManagedConnectorProvider;
+  messaging?: MessagingSurface;
+  email?: TransactionalEmailProvider;
+  notifications?: NotificationProvider;
+  billing?: BillingProvider;
+  remoteConnectors?: RemoteConnectorDependencies;
+  logger?: Logger;
+  runtime?: AgentRuntime;
+  contextStrategy?: AgentContextStrategy;
+};
+
+async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   const {
     prisma: prismaOverride,
     realtime: realtimeOverride,
@@ -223,6 +234,8 @@ export async function createApp(
     trustedProxies: env.trustedProxies,
     header: env.clientIpHeader,
   });
+  const rowSecurity = rowSecurityWarning(await describeRowSecurity(prisma));
+  if (rowSecurity) logger.warn(rowSecurity);
   const realtime =
     realtimeOverride ??
     (created.pool
@@ -691,6 +704,16 @@ export async function createApp(
   mountScreenTarget(app, prisma, env.screenProxySecret);
   mountDiagramScript(app);
   const auditAuthResponse = createAuthResponseAudit();
+  // Account and session tables, signup bootstrap and account deletion span tenants;
+  // webhooks authenticate a bot or provider, then resolve the tenant from it.
+  for (const [path, reason] of [
+    ["/api/auth/*", "authentication"],
+    ["/api/v1/bots/*", "bot webhook"],
+    ["/api/v1/messaging/*", "messaging webhook"],
+    ["/api/v1/phone/*", "messaging webhook"],
+  ] as const) {
+    app.use(path, (_c, next) => runAsSystem(reason, next));
+  }
   app.on(["GET", "POST"], "/api/auth/*", async (c) => {
     const path = new URL(c.req.url).pathname.replace("/api/auth", "");
     if (isBlockedAuthPath(path)) {
@@ -948,7 +971,7 @@ export async function createApp(
         })();
       }
     }
-    messaging.onInbound(async (event) => {
+    const handleInbound = async (event: MessagingInboundEvent) => {
       if (event.type !== "message") {
         await applyMessagingOutboundStatus(prisma, event);
         return;
@@ -973,7 +996,8 @@ export async function createApp(
         throw new Error("Team chat bridge is unavailable");
       }
       await inbound(event);
-    });
+    };
+    messaging.onInbound((event) => runAsSystem("messaging inbound", () => handleInbound(event)));
     mountMessagingWebhookRoutes(app, { messaging });
     // Start polling-mode adapters (e.g. Telegram with no public webhook URL
     // registered) immediately rather than waiting for the first webhook
