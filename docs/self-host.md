@@ -191,7 +191,9 @@ Messages, events, threads, memory, artifacts, secrets, model and voice credentia
 row-level security. Each signed-in request sees only its Space's rows, plus the user's own
 account-level credentials. A query that leaves out its Space filter returns nothing from other
 Spaces. Background jobs, reconcilers and webhooks run in a named system scope (`runAsSystem` in
-`packages/db`).
+`packages/db`). The job queue's tables (`graphile_worker`) hold job metadata, not Space content:
+graphile-worker turns on row-level security for them, and `pnpm db:migrate` adds a policy that
+gives the app login every row.
 
 With only `DATABASE_URL` set, migrations and the app share one login. Everything keeps working,
 but `pnpm db:migrate`, the API and the worker warn that row-level security is not enforced. To fix
@@ -588,6 +590,25 @@ Caddy resolves the client first. `Caddyfile.prod` takes the TCP peer and overwri
 header: `Caddyfile.cloudflare.example` does this with Cloudflare's ranges and `CF-Connecting-IP`.
 For another CDN, copy that file and change the ranges and the header. If you copied the Cloudflare
 example before this change, copy it again.
+
+### Content-Security-Policy
+
+The web server sends a strict Content-Security-Policy: scripts and connections are limited to the
+app's own origin. When a CDN in front of the app injects a script, such as an analytics beacon, the
+browser blocks it until you add its origins. `RAKAZO_CSP_SCRIPT_SRC` extends `script-src` and
+`RAKAZO_CSP_CONNECT_SRC` extends `connect-src`. Each takes space-separated `https://` origins, with
+an optional port and leading `*.` wildcard (`https://*.example.com`). Keywords such as
+`'unsafe-inline'`, bare schemes, `*`, `http://` origins and paths are rejected, and the web server
+refuses to start until the value is fixed. Restart the web service after changing either one.
+
+For example, Cloudflare Web Analytics loads its script from one host and reports to another:
+
+```bash
+RAKAZO_CSP_SCRIPT_SRC=https://static.cloudflareinsights.com
+RAKAZO_CSP_CONNECT_SRC=https://cloudflareinsights.com
+```
+
+Add only origins you trust: a script these settings allow runs with the signed-in user's access.
 
 ### Security events
 
@@ -1082,7 +1103,11 @@ The guard does not protect arbitrary direct `ufw` commands or SSH daemon configu
 To deploy from CI, install `infra/compose/deploy-main.sh` as `/usr/local/sbin/rakazo-deploy-main`
 and give CI a key restricted to it in the deploy user's `authorized_keys`
 (`restrict,command="/usr/local/sbin/rakazo-deploy-main" ssh-ed25519 …`). It builds `origin/main`,
-restarts the stack, waits for `https://$RAKAZO_HOST/health`, and rolls back on failure. Build and
+starts each new API and web container beside the running one and stops the old one only once the
+new one is healthy, so a deploy does not take the site offline, then waits for
+`https://$RAKAZO_HOST/health` and rolls back on failure. Old and new API containers serve together
+for a few seconds after migrations run, so a migration must keep working with the previous
+release: add first, and drop or rename only in a later deploy. Build and
 start are time-limited so a stuck build fails the deploy instead of holding its lock; a deploy that
 finds the lock held exits non-zero. A deploy refuses to start with less than
 `RAKAZO_DEPLOY_MIN_FREE_GB` (default `5`) free, and after a healthy rollout it removes untagged
@@ -1204,7 +1229,8 @@ in `DATABASE_URL` (`rakazo_app` in Compose) as a superuser (the Compose owner is
 restart the API and worker. Role attributes are not inherited, so granting it to `rakazo_app` does
 nothing for a separate login. The app then runs as before, with a startup warning, and later
 migrations leave that login alone. Undo it with
-`NOBYPASSRLS` and another restart. Rolling back to an older release works without changes: it
+`NOBYPASSRLS` and another restart, then search the API and worker logs for
+`violates row-level security` and `without a tenant or system context`. Rolling back to an older release works without changes: it
 ignores the extra variable and connects as the owner.
 
 ### Space privacy-boundary migration

@@ -1087,6 +1087,10 @@ msgstr "Vérifié {checked}"
 msgid "Checking computer setup…"
 msgstr ""
 
+#: src/components/McpServerHealthLine.tsx
+msgid "Checking connection…"
+msgstr "Vérification de la connexion…"
+
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -3751,6 +3755,10 @@ msgstr "Choisissez un outil à vérifier"
 msgid "Pin"
 msgstr "Épingler"
 
+#: src/pages/Shell.tsx
+msgid "Pinned"
+msgstr "Épinglés"
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Play {name}"
 msgstr "Lire {name}"
@@ -4145,6 +4153,7 @@ msgstr "Restauration de votre espace de travail"
 #: src/components/PasskeySettings.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelBackupsSettings.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Retry"
 msgstr "Réessayer"
@@ -5034,6 +5043,7 @@ msgid "Type your answer"
 msgstr "Saisissez votre réponse"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/Shell.tsx
 msgid "Unassigned"
 msgstr "Non assigné"
 

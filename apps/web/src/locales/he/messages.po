@@ -1087,6 +1087,10 @@ msgstr "נבדק {checked}"
 msgid "Checking computer setup…"
 msgstr "בודק את הגדרות המחשב…"
 
+#: src/components/McpServerHealthLine.tsx
+msgid "Checking connection…"
+msgstr "בודק חיבור…"
+
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -3751,6 +3755,10 @@ msgstr ""
 msgid "Pin"
 msgstr "הצמדה"
 
+#: src/pages/Shell.tsx
+msgid "Pinned"
+msgstr "מוצמדים"
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Play {name}"
 msgstr "הפעלת {name}"
@@ -4145,6 +4153,7 @@ msgstr "משחזר את סביבת העבודה"
 #: src/components/PasskeySettings.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelBackupsSettings.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Retry"
 msgstr "לנסות שוב"
@@ -5034,6 +5043,7 @@ msgid "Type your answer"
 msgstr "יש להקליד תשובה"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/Shell.tsx
 msgid "Unassigned"
 msgstr "ללא שיוך"
 
