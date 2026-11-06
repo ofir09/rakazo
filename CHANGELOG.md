@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - DeepInfra is a model connection choice next to Ollama Cloud. Paste a DeepInfra API key and **Find models** lists its chat models, with each model's image input, thinking, context window and prompt cache pricing filled in from DeepInfra's own model details ([self-hosted models](docs/self-host-models.md)).
+- Bots can pass files between tools without the file going through the model. A file a tool returns, such as an image, a PDF, or an attachment Gmail's MCP server saves, is kept as a temporary file, and the bot sees a short mention instead of its bytes. To use it in another tool, the bot writes `{{file:ID}}` (the content), `{{file_url:ID}}` (a short-lived download link) or `{{file_path:ID}}` (a local file path for stdio servers), and Rakazo fills it in right before the call. Approval cards show the file's name and size. Each stdio server gets private input and output folders, and known packages such as Gmail's are pointed at them automatically, so forwarding or uploading an attachment needs no setup. Temporary files are encrypted like other files, never appear in file lists, and are deleted 3 hours after they were last used.
 
 ### Fixed
 
